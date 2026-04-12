@@ -120,14 +120,14 @@ const ProjectDetailScreen = ({ route, navigation }) => {
                 <Text
                   style={[
                     styles.statusText,
-                    item.paymentStatus === 'Paid'
+                    item.status === 'Paid'
                       ? styles.statusPaid
-                      : item.paymentStatus === 'Reimbursed'
+                      : item.status === 'Reimbursed'
                       ? styles.statusReimbursed
                       : styles.statusPending,
                   ]}
                 >
-                  {item.paymentStatus}
+                  {item.status}
                 </Text>
               </View>
             </View>
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingBottom: 15,
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingTop: Platform.OS === 'android' ? 50 : 30,
     backgroundColor: '#FFFFFF',
     elevation: 2,
   },

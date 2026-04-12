@@ -8,11 +8,11 @@ import { useFocusEffect } from '@react-navigation/native';
 
 const HomeScreen = ({ navigation }) => {
   const [projects, setProjects] = useState([]);
+  const [totalSpent, setTotalSpent] = useState(0); // STATE MỚI ĐỂ LƯU TỔNG CHI TIÊU
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [favorites, setFavorites] = useState([]); // State lưu danh sách ID yêu thích
+  const [favorites, setFavorites] = useState([]); 
 
-  // Load danh sách thả tim từ bộ nhớ máy mỗi khi màn hình được Focus
   useFocusEffect(
     useCallback(() => {
       const loadFavorites = async () => {
@@ -30,8 +30,9 @@ const HomeScreen = ({ navigation }) => {
   );
 
   useEffect(() => {
+    // 1. KÉO DỮ LIỆU PROJECTS
     const projectsRef = ref(db, 'projects');
-    const unsubscribe = onValue(projectsRef, (snapshot) => {
+    const unsubscribeProjects = onValue(projectsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         const formattedData = Object.keys(data).map(key => ({
@@ -45,7 +46,26 @@ const HomeScreen = ({ navigation }) => {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // 2. KÉO DỮ LIỆU EXPENSES ĐỂ TÍNH TỔNG CHI TIÊU
+    const expensesRef = ref(db, 'expenses');
+    const unsubscribeExpenses = onValue(expensesRef, (snapshot) => {
+      let sum = 0;
+      const data = snapshot.val();
+      if (data) {
+        Object.values(data).forEach(exp => {
+          // Chỉ cộng những khoản hợp lệ (giống logic Admin)
+          if (exp.status === 'Paid' || exp.status === 'Pending' || exp.status === 'Reimbursed') {
+            sum += (exp.amount || 0);
+          }
+        });
+      }
+      setTotalSpent(sum);
+    });
+
+    return () => {
+      unsubscribeProjects();
+      unsubscribeExpenses();
+    };
   }, []);
 
   const totalBudget = projects.reduce((sum, proj) => sum + (proj.budget || 0), 0);
@@ -58,13 +78,12 @@ const HomeScreen = ({ navigation }) => {
     return matchName || matchStartDate || matchEndDate;
   });
 
-  // Hàm xử lý Thả tim / Bỏ tim
   const toggleFavorite = async (projectId) => {
     let newFavorites = [...favorites];
     if (newFavorites.includes(projectId)) {
-      newFavorites = newFavorites.filter(id => id !== projectId); // Bỏ tim
+      newFavorites = newFavorites.filter(id => id !== projectId); 
     } else {
-      newFavorites.push(projectId); // Thả tim
+      newFavorites.push(projectId); 
     }
     setFavorites(newFavorites);
     await AsyncStorage.setItem('favorites', JSON.stringify(newFavorites));
@@ -83,7 +102,6 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{item.status}</Text>
           </View>
-          {/* NÚT TIM TỰ ĐỘNG ĐỔI MÀU */}
           <TouchableOpacity onPress={() => toggleFavorite(item.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Icon name={isFav ? "favorite" : "favorite-border"} size={24} color={isFav ? "#EF4444" : "#94A3B8"} />
           </TouchableOpacity>
@@ -130,9 +148,18 @@ const HomeScreen = ({ navigation }) => {
         </View>
       </View>
 
+      {/* THẺ TỔNG KẾT ĐƯỢC CHIA LÀM 2 CỘT */}
       <View style={styles.summaryCard}>
-        <Text style={styles.cardLabel}>TOTAL ACTIVE BUDGET</Text>
-        <Text style={styles.cardAmount}>${totalBudget.toLocaleString()}</Text>
+        <View style={styles.summaryColumn}>
+          <Text style={styles.cardLabel}>TOTAL BUDGET</Text>
+          <Text style={styles.cardAmount}>${totalBudget.toLocaleString()}</Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryColumn}>
+          <Text style={styles.cardLabel}>TOTAL SPENT</Text>
+          {/* Dùng màu Cam/Đỏ cho số tiền đã tiêu */}
+          <Text style={[styles.cardAmount, { color: '#F59E0B' }]}>${totalSpent.toLocaleString()}</Text>
+        </View>
       </View>
 
       <Text style={styles.sectionTitle}>Active Projects</Text>
@@ -155,20 +182,25 @@ const HomeScreen = ({ navigation }) => {
   );
 };
 
-// ... (GIỮ NGUYÊN TOÀN BỘ PHẦN STYLES Ở ĐÂY BẠN NHÉ)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC', paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 50 : 30 },
   header: { marginBottom: 16 },
-  appName: { fontSize: 20, fontWeight: '900', color: '#0F172A', marginBottom: 20 },
+  appName: { fontSize: 20, fontWeight: '900', color: '#0F172A', marginBottom: 30 },
   titleGroup: { marginBottom: 16 },
   welcome: { fontSize: 12, color: '#64748B', fontWeight: 'bold', letterSpacing: 1 },
   title: { fontSize: 28, color: '#0F172A', fontWeight: 'bold' },
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, paddingHorizontal: 12, height: 50, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#0F172A' },
-  summaryCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3, marginBottom: 24 },
-  cardLabel: { fontSize: 12, color: '#64748B', fontWeight: 'bold', marginBottom: 8 },
-  cardAmount: { fontSize: 32, color: '#0284C7', fontWeight: 'bold' },
+  
+  // CẬP NHẬT STYLE CHO SUMMARY CARD
+  summaryCard: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3, marginBottom: 24 },
+  summaryColumn: { flex: 1 },
+  summaryDivider: { width: 1, backgroundColor: '#E2E8F0', marginHorizontal: 15 },
+  
+  cardLabel: { fontSize: 10, color: '#64748B', fontWeight: 'bold', marginBottom: 8, textTransform: 'uppercase' },
+  cardAmount: { fontSize: 22, color: '#0284C7', fontWeight: 'bold' }, // Chữ nhỏ lại một chút để vừa 2 cột
+  
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A', marginBottom: 16 },
   projectCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },

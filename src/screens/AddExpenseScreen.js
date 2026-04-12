@@ -16,6 +16,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { ref, set } from 'firebase/database';
 import { db } from '../api/firebaseConfig';
+import GetLocation from 'react-native-get-location'; // THÊM THƯ VIỆN LOCATION
 
 const AddExpenseScreen = ({ route, navigation }) => {
   const { project } = route.params;
@@ -32,6 +33,9 @@ const AddExpenseScreen = ({ route, navigation }) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // State quản lý hiệu ứng quay loading khi đang tìm GPS
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+
   const formattedDate = dateObj.toISOString().split('T')[0];
 
   const handleDateChange = (event, selectedDate) => {
@@ -39,9 +43,50 @@ const AddExpenseScreen = ({ route, navigation }) => {
     if (selectedDate) setDateObj(selectedDate);
   };
 
+  // HÀM XỬ LÝ LẤY VỊ TRÍ VÀ DỊCH RA TÊN ĐƯỜNG
+  const handleDetectLocation = async () => {
+    setIsDetectingLocation(true);
+    try {
+      // 1. Lấy tọa độ GPS
+      const position = await GetLocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 15000,
+      });
+
+      const { latitude, longitude } = position;
+
+      // 2. Dịch tọa độ ra địa chỉ (Phương án B dùng OpenStreetMap miễn phí)
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+        );
+        const data = await response.json();
+
+        if (data && data.display_name) {
+          setLocation(data.display_name); // Hiển thị tên đường
+        } else {
+          setLocation(`${latitude}, ${longitude}`); // Nếu lỗi API thì hiện tọa độ
+        }
+      } catch (apiError) {
+        setLocation(`${latitude}, ${longitude}`); // Fallback Phương án A
+      }
+    } catch (error) {
+      Alert.alert(
+        'GPS Error',
+        'Please ensure Location Services are enabled on your device.',
+      );
+    } finally {
+      setIsDetectingLocation(false);
+    }
+  };
+
   const handleSaveExpense = async () => {
-    if (!amount || !claimant) {
-      Alert.alert('Missing Fields', 'Please fill in Amount and Claimant (*)');
+    if (!amount) {
+      Alert.alert('Missing Fields', 'Please fill in Amount(*)');
+      return;
+    }
+    if (!claimant) {
+      Alert.alert('Missing Fields', 'Please fill in Claimant Name(*)');
       return;
     }
 
@@ -57,7 +102,7 @@ const AddExpenseScreen = ({ route, navigation }) => {
         date: formattedDate,
         type: type,
         paymentMethod: paymentMethod,
-        paymentStatus: 'Pending', // Luôn gán mặc định là Pending
+        status: 'Pending',
         claimant: claimant,
         description: description,
         location: location,
@@ -193,14 +238,27 @@ const AddExpenseScreen = ({ route, navigation }) => {
           />
         </View>
 
+        {/* Ô LOCATION ĐƯỢC TÍCH HỢP NÚT AUTO-DETECT */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Location (Optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Hanoi Office"
-            value={location}
-            onChangeText={setLocation}
-          />
+          <View style={styles.locationInputContainer}>
+            <TextInput
+              style={styles.locationInput}
+              placeholder="e.g. Hanoi Office"
+              value={location}
+              onChangeText={setLocation}
+            />
+            <TouchableOpacity
+              onPress={handleDetectLocation}
+              style={styles.locationIconBtn}
+            >
+              {isDetectingLocation ? (
+                <ActivityIndicator size="small" color="#0284C7" />
+              ) : (
+                <Icon name="my-location" size={24} color="#0284C7" />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.inputGroup}>
@@ -241,7 +299,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingBottom: 15,
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingTop: Platform.OS === 'android' ? 50 : 30,
     backgroundColor: '#FFFFFF',
     elevation: 2,
   },
@@ -263,6 +321,7 @@ const styles = StyleSheet.create({
     color: '#334155',
     marginBottom: 8,
   },
+
   input: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -273,6 +332,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#0F172A',
   },
+
+  // Style đặc biệt cho thẻ Location
+  locationInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    height: 50,
+  },
+  locationInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#0F172A',
+  },
+  locationIconBtn: {
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100%',
+  },
+
   textArea: { height: 100, textAlignVertical: 'top', paddingTop: 12 },
   pickerContainer: {
     backgroundColor: '#FFFFFF',
@@ -295,15 +378,6 @@ const styles = StyleSheet.create({
     height: 50,
   },
   dateText: { fontSize: 16, color: '#0F172A' },
-
-  // Style cho ô input bị khóa
-  disabledInput: {
-    backgroundColor: '#F1F5F9',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  disabledText: { color: '#64748B', fontWeight: 'bold' },
-
   bottomContainer: {
     position: 'absolute',
     bottom: 0,
