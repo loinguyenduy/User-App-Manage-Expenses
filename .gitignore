@@ -73,3 +73,30 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Firebase
+# Không nên đẩy file chứa key dịch vụ của Google nếu bạn muốn bảo mật hoàn toàn
+# google-services.json (Android)
+# GoogleService-Info.plist (iOS)
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Env files (Chứa các biến môi trường, API keys)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# OS X
+.DS_Store
+Thumbs.db
+
+# Cấu hình cá nhân của Android Studio
+.navigation/
+captures/
+*.apk
+*.aar
+*.jks
