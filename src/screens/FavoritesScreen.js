@@ -19,7 +19,6 @@ const FavoritesScreen = ({ navigation }) => {
   const [favoriteProjects, setFavoriteProjects] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Kéo dữ liệu mỗi khi người dùng bấm vào Tab "Favorites"
   useFocusEffect(
     useCallback(() => {
       fetchFavorites();
@@ -29,7 +28,6 @@ const FavoritesScreen = ({ navigation }) => {
   const fetchFavorites = async () => {
     setLoading(true);
     try {
-      // 1. Lấy danh sách ID đã lưu ở Local
       const storedFavs = await AsyncStorage.getItem('favorites');
       const favIds = storedFavs ? JSON.parse(storedFavs) : [];
 
@@ -39,7 +37,6 @@ const FavoritesScreen = ({ navigation }) => {
         return;
       }
 
-      // 2. Kéo toàn bộ dự án từ Cloud (Dùng 'get' thay vì 'onValue' để tải 1 lần cho nhẹ)
       const snapshot = await get(ref(db, 'projects'));
       const data = snapshot.val();
 
@@ -49,7 +46,6 @@ const FavoritesScreen = ({ navigation }) => {
           ...data[key],
         }));
 
-        // 3. Lọc ra những dự án trùng khớp với ID yêu thích
         const filtered = allProjects.filter(proj => favIds.includes(proj.id));
         setFavoriteProjects(filtered.reverse());
       }
@@ -67,7 +63,6 @@ const FavoritesScreen = ({ navigation }) => {
       favIds = favIds.filter(id => id !== projectId);
       await AsyncStorage.setItem('favorites', JSON.stringify(favIds));
 
-      // Load lại màn hình
       fetchFavorites();
     } catch (error) {
       console.error(error);

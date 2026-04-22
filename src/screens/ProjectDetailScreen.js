@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Platform, // UPDATE: Đã thêm Platform để hỗ trợ UI
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { ref, query, orderByChild, equalTo, onValue } from 'firebase/database';
@@ -18,9 +19,13 @@ const ProjectDetailScreen = ({ route, navigation }) => {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Kéo danh sách Expense dựa trên projectId
+  // UPDATE: Kiểm tra dự án đã complete chưa để khóa logic
+  const isProjectCompleted = project.status.toLowerCase() === 'completed';
+
+  // NEW: state cho filter
+  const [filterStatus, setFilterStatus] = useState('All');
+
   useEffect(() => {
-    // Tạo truy vấn: TÌM TRONG BẢNG expenses NƠI CÓ projectId BẰNG VỚI id CỦA DỰ ÁN NÀY
     const expensesRef = query(
       ref(db, 'expenses'),
       orderByChild('projectId'),
@@ -33,8 +38,9 @@ const ProjectDetailScreen = ({ route, navigation }) => {
         const formattedData = Object.keys(data).map(key => ({
           id: key,
           ...data[key],
+          firebaseKey: key, // UPDATE: Bổ sung firebaseKey cho chức năng Delete và Update
         }));
-        setExpenses(formattedData.reverse()); // Mới nhất lên đầu
+        setExpenses(formattedData.reverse());
       } else {
         setExpenses([]);
       }
@@ -43,6 +49,12 @@ const ProjectDetailScreen = ({ route, navigation }) => {
 
     return () => unsubscribe();
   }, [project.id]);
+
+  // NEW: filter logic
+  const filteredExpenses = expenses.filter(item => {
+    if (filterStatus === 'All') return true;
+    return item.status === filterStatus;
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -62,7 +74,6 @@ const ProjectDetailScreen = ({ route, navigation }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* THẺ THÔNG TIN DỰ ÁN */}
         <View style={styles.card}>
           <View style={styles.titleRow}>
             <Text style={styles.projectName}>{project.name}</Text>
@@ -93,8 +104,39 @@ const ProjectDetailScreen = ({ route, navigation }) => {
           </Text>
         </View>
 
-        {/* DANH SÁCH CHI PHÍ (EXPENSES) */}
+        {/* UPDATE: Cảnh báo dự án đã đóng */}
+        {isProjectCompleted && (
+          <View style={styles.lockedWarning}>
+            <Icon name="lock" size={20} color="#B45309" />
+            <Text style={styles.lockedText}>
+              This project is Completed. Expense recording is closed.
+            </Text>
+          </View>
+        )}
+
         <Text style={styles.listTitle}>Recorded Expenses</Text>
+
+        <View style={styles.filterContainer}>
+          {['All', 'Pending', 'Paid', 'Reimbursed'].map(status => (
+            <TouchableOpacity
+              key={status}
+              style={[
+                styles.filterBtn,
+                filterStatus === status && styles.filterBtnActive,
+              ]}
+              onPress={() => setFilterStatus(status)}
+            >
+              <Text
+                style={[
+                  styles.filterText,
+                  filterStatus === status && styles.filterTextActive,
+                ]}
+              >
+                {status}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {loading ? (
           <ActivityIndicator
@@ -102,55 +144,73 @@ const ProjectDetailScreen = ({ route, navigation }) => {
             color="#0284C7"
             style={{ marginTop: 20 }}
           />
-        ) : expenses.length === 0 ? (
-          <Text style={styles.emptyText}>No expenses recorded yet.</Text>
+        ) : filteredExpenses.length === 0 ? ( 
+          <Text style={styles.emptyText}>No expenses found.</Text>
         ) : (
-          expenses.map(item => (
-            <View key={item.id} style={styles.expenseItem}>
-              <View style={styles.expenseLeft}>
-                <Text style={styles.expenseType}>{item.type}</Text>
-                <Text style={styles.expenseDate}>
-                  {item.date} • {item.claimant}
-                </Text>
-              </View>
-              <View style={styles.expenseRight}>
-                <Text style={styles.expenseAmount}>
-                  ${item.amount.toLocaleString()}
-                </Text>
-                <Text
-                  style={[
-                    styles.statusText,
-                    item.status === 'Paid'
-                      ? styles.statusPaid
-                      : item.status === 'Reimbursed'
-                      ? styles.statusReimbursed
-                      : styles.statusPending,
-                  ]}
-                >
-                  {item.status}
-                </Text>
-              </View>
-            </View>
-          ))
+          filteredExpenses.map(
+            (
+              item, 
+            ) => (
+              // UPDATE: Đổi View thành TouchableOpacity để cho phép bấm vào và Mở Edit Expense (Truyền expenseToEdit)
+              <TouchableOpacity 
+                key={item.id} 
+                style={styles.expenseItem}
+                activeOpacity={0.7}
+                onPress={() =>
+                  navigation.navigate('AddExpense', {
+                    project: project,
+                    expenseToEdit: item,
+                  })
+                }
+              >
+                <View style={styles.expenseLeft}>
+                  <Text style={styles.expenseType}>{item.type}</Text>
+                  <Text style={styles.expenseDate}>
+                    {item.date} • {item.claimant}
+                  </Text>
+                </View>
+                <View style={styles.expenseRight}>
+                  <Text style={styles.expenseAmount}>
+                    ${item.amount.toLocaleString()}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.statusText,
+                      item.status === 'Paid'
+                        ? styles.statusPaid
+                        : item.status === 'Reimbursed'
+                        ? styles.statusReimbursed
+                        : styles.statusPending,
+                    ]}
+                  >
+                    {item.status}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ),
+          )
         )}
       </ScrollView>
 
-      <View style={styles.bottomContainer}>
-        <TouchableOpacity
-          style={styles.addExpenseBtn}
-          onPress={() =>
-            navigation.navigate('AddExpense', { project: project })
-          }
-        >
-          <Icon
-            name="add-receipt"
-            size={20}
-            color="#FFFFFF"
-            style={{ marginRight: 8 }}
-          />
-          <Text style={styles.btnText}>ADD EXPENSE</Text>
-        </TouchableOpacity>
-      </View>
+      {/* UPDATE: Chỉ hiện nút ADD EXPENSE nếu dự án CHƯA hoàn thành */}
+      {!isProjectCompleted && (
+        <View style={styles.bottomContainer}>
+          <TouchableOpacity
+            style={styles.addExpenseBtn}
+            onPress={() =>
+              navigation.navigate('AddExpense', { project: project })
+            }
+          >
+            <Icon
+              name="add-receipt"
+              size={20}
+              color="#FFFFFF"
+              style={{ marginRight: 8 }}
+            />
+            <Text style={styles.btnText}>ADD EXPENSE</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -181,6 +241,24 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
     marginBottom: 24,
+  },
+  
+  lockedWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  lockedText: {
+    color: '#B45309',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginLeft: 8,
+    flex: 1,
   },
   titleRow: {
     flexDirection: 'row',
@@ -237,6 +315,30 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
+  filterContainer: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  filterBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    marginHorizontal: 4,
+    borderRadius: 20,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+  },
+  filterBtnActive: {
+    backgroundColor: '#0284C7',
+  },
+  filterText: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: 'bold',
+  },
+  filterTextActive: {
+    color: '#FFFFFF',
+  },
+
   expenseItem: {
     backgroundColor: '#FFFFFF',
     padding: 16,
@@ -265,9 +367,9 @@ const styles = StyleSheet.create({
   },
 
   statusText: { fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' },
-  statusPending: { color: '#F59E0B' }, // Màu vàng cam
-  statusPaid: { color: '#10B981' }, // Màu xanh lá
-  statusReimbursed: { color: '#8B5CF6' }, // Màu tím
+  statusPending: { color: '#F59E0B' },
+  statusPaid: { color: '#10B981' },
+  statusReimbursed: { color: '#8B5CF6' },
 
   bottomContainer: {
     position: 'absolute',
