@@ -19,7 +19,6 @@ import RegisterScreen from '../screens/RegisterScreen';
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-// Stack dành cho người chưa đăng nhập
 const AuthStackNavigator = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="Login" component={LoginScreen} />
@@ -27,7 +26,6 @@ const AuthStackNavigator = () => (
   </Stack.Navigator>
 );
 
-// Stack chính sau khi đã đăng nhập
 const HomeStackNavigator = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="HomeMain" component={HomeScreen} />
@@ -43,14 +41,12 @@ const AppNavigator = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Lấy thông tin user từ DB
         const userSnap = await get(ref(db, `users/${firebaseUser.uid}`));
         if (userSnap.exists() && userSnap.val().role === 'staff' && userSnap.val().isActive) {
           const userData = { uid: firebaseUser.uid, ...userSnap.val() };
           await AsyncStorage.setItem('currentUser', JSON.stringify(userData));
           setUser(userData);
         } else {
-          // Bị vô hiệu hóa hoặc không phải staff thì ép logout
           auth.signOut();
           await AsyncStorage.removeItem('currentUser');
           setUser(null);

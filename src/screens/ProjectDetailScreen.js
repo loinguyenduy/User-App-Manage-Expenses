@@ -7,23 +7,32 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Platform, // UPDATE: Đã thêm Platform để hỗ trợ UI
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { ref, query, orderByChild, equalTo, onValue } from 'firebase/database';
 import { db } from '../api/firebaseConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ProjectDetailScreen = ({ route, navigation }) => {
   const { project } = route.params;
 
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
 
-  // UPDATE: Kiểm tra dự án đã complete chưa để khóa logic
   const isProjectCompleted = project.status.toLowerCase() === 'completed';
-
-  // NEW: state cho filter
   const [filterStatus, setFilterStatus] = useState('All');
+
+  useEffect(() => {
+    AsyncStorage.getItem('currentUser')
+      .then(userStr => {
+        if (userStr) {
+          setCurrentUser(JSON.parse(userStr));
+        }
+      })
+      .catch(err => console.error(err));
+  }, []);
 
   useEffect(() => {
     const expensesRef = query(
@@ -38,7 +47,7 @@ const ProjectDetailScreen = ({ route, navigation }) => {
         const formattedData = Object.keys(data).map(key => ({
           id: key,
           ...data[key],
-          firebaseKey: key, // UPDATE: Bổ sung firebaseKey cho chức năng Delete và Update
+          firebaseKey: key,
         }));
         setExpenses(formattedData.reverse());
       } else {
@@ -50,8 +59,10 @@ const ProjectDetailScreen = ({ route, navigation }) => {
     return () => unsubscribe();
   }, [project.id]);
 
-  // NEW: filter logic
   const filteredExpenses = expenses.filter(item => {
+    const isMyExpense = currentUser && item.claimant === currentUser.fullName;
+    if (!isMyExpense) return false;
+
     if (filterStatus === 'All') return true;
     return item.status === filterStatus;
   });
@@ -104,7 +115,6 @@ const ProjectDetailScreen = ({ route, navigation }) => {
           </Text>
         </View>
 
-        {/* UPDATE: Cảnh báo dự án đã đóng */}
         {isProjectCompleted && (
           <View style={styles.lockedWarning}>
             <Icon name="lock" size={20} color="#B45309" />
@@ -114,7 +124,7 @@ const ProjectDetailScreen = ({ route, navigation }) => {
           </View>
         )}
 
-        <Text style={styles.listTitle}>Recorded Expenses</Text>
+        <Text style={styles.listTitle}>My Recorded Expenses</Text>
 
         <View style={styles.filterContainer}>
           {['All', 'Pending', 'Paid', 'Reimbursed'].map(status => (
@@ -144,55 +154,51 @@ const ProjectDetailScreen = ({ route, navigation }) => {
             color="#0284C7"
             style={{ marginTop: 20 }}
           />
-        ) : filteredExpenses.length === 0 ? ( 
-          <Text style={styles.emptyText}>No expenses found.</Text>
+        ) : filteredExpenses.length === 0 ? (
+          <Text style={styles.emptyText}>You haven't added any expenses.</Text>
         ) : (
-          filteredExpenses.map(
-            (
-              item, 
-            ) => (
-              // UPDATE: Đổi View thành TouchableOpacity để cho phép bấm vào và Mở Edit Expense (Truyền expenseToEdit)
-              <TouchableOpacity 
-                key={item.id} 
-                style={styles.expenseItem}
-                activeOpacity={0.7}
-                onPress={() =>
-                  navigation.navigate('AddExpense', {
-                    project: project,
-                    expenseToEdit: item,
-                  })
-                }
-              >
-                <View style={styles.expenseLeft}>
-                  <Text style={styles.expenseType}>{item.type}</Text>
-                  <Text style={styles.expenseDate}>
-                    {item.date} • {item.claimant}
-                  </Text>
-                </View>
-                <View style={styles.expenseRight}>
-                  <Text style={styles.expenseAmount}>
-                    ${item.amount.toLocaleString()}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.statusText,
-                      item.status === 'Paid'
-                        ? styles.statusPaid
-                        : item.status === 'Reimbursed'
-                        ? styles.statusReimbursed
-                        : styles.statusPending,
-                    ]}
-                  >
-                    {item.status}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ),
-          )
+          filteredExpenses.map(item => (
+            // Bỏ đi các logic opacity và check quyền vì nếu hiện ra thì mặc định là được phép bấm
+            <TouchableOpacity
+              key={item.id}
+              style={styles.expenseItem}
+              activeOpacity={0.7}
+              onPress={() => {
+                navigation.navigate('AddExpense', {
+                  project: project,
+                  expenseToEdit: item,
+                });
+              }}
+            >
+              <View style={styles.expenseLeft}>
+                <Text style={styles.expenseType}>{item.type}</Text>
+                <Text style={styles.expenseDate}>
+                  {item.date} • {item.claimant}
+                </Text>
+              </View>
+
+              <View style={styles.expenseRight}>
+                <Text style={styles.expenseAmount}>
+                  ${item.amount.toLocaleString()}
+                </Text>
+                <Text
+                  style={[
+                    styles.statusText,
+                    item.status === 'Paid'
+                      ? styles.statusPaid
+                      : item.status === 'Reimbursed'
+                      ? styles.statusReimbursed
+                      : styles.statusPending,
+                  ]}
+                >
+                  {item.status}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))
         )}
       </ScrollView>
 
-      {/* UPDATE: Chỉ hiện nút ADD EXPENSE nếu dự án CHƯA hoàn thành */}
       {!isProjectCompleted && (
         <View style={styles.bottomContainer}>
           <TouchableOpacity
@@ -201,12 +207,6 @@ const ProjectDetailScreen = ({ route, navigation }) => {
               navigation.navigate('AddExpense', { project: project })
             }
           >
-            <Icon
-              name="add-receipt"
-              size={20}
-              color="#FFFFFF"
-              style={{ marginRight: 8 }}
-            />
             <Text style={styles.btnText}>ADD EXPENSE</Text>
           </TouchableOpacity>
         </View>
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     marginBottom: 24,
   },
-  
+
   lockedWarning: {
     flexDirection: 'row',
     alignItems: 'center',
